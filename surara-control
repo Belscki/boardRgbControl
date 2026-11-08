@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Inicia o Surara Control usando o ambiente virtual do projeto.
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+cd "$DIR" && exec "$DIR/.venv/bin/python" -m surara "$@"

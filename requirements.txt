@@ -1,0 +1,3 @@
+# Instalar num venv com --system-site-packages (PySide6, PyGObject/GStreamer e dbus-next vêm do Fedora)
+evdev>=1.7
+numpy>=1.26

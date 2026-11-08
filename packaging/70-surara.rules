@@ -1,0 +1,5 @@
+# Redragon Surara PRO (SONiX/EVision 0c45:5004)
+# Dá acesso ao usuário logado (uaccess) ao canal HID de RGB e aos eventos do teclado (macros).
+# Precisa ser < 73 para ser processado antes de 73-seat-late.rules.
+KERNEL=="hidraw*", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="5004", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="5004", TAG+="uaccess"

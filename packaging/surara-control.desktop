@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Surara Control
+GenericName=RGB e macros do teclado
+Comment=RGB por tecla, espaços de tela e macros para o Redragon Surara PRO
+Exec=@BIN@
+Icon=input-keyboard
+Terminal=false
+Categories=Settings;HardwareSettings;Utility;
+Keywords=rgb;teclado;macro;redragon;surara;
