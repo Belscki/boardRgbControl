@@ -8,10 +8,64 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout
                                QLineEdit, QListWidget, QMessageBox, QPushButton, QSlider, QSpinBox, QSplitter,
                                QVBoxLayout, QWidget)
 
-from ..config import ZONE_DEFAULT
+from ..config import STYLE_KEYS, ZONE_DEFAULT, zone_style
+from .. import grid
+from .grid_dialog import METHODS, GridDialog
 from .widgets import KeyboardWidget, ScreenPreview
 
-METHODS = [("average", "Média"), ("vivid", "Cor mais viva"), ("dominant", "Cor predominante")]
+class StyleWidgets:
+    """Cálculo da cor, suavização, saturação e intensidade (usado no global e por espaço)."""
+
+    def __init__(self, on_change):
+        self.method = QComboBox()
+        for k, label in METHODS:
+            self.method.addItem(label, k)
+        self.smooth = QSlider(Qt.Horizontal)
+        self.smooth.setRange(0, 95)
+        self.smooth.setMinimumWidth(90)
+        self.smooth_label = QLabel()
+        self.smooth_label.setMinimumWidth(34)
+        self.smooth.valueChanged.connect(lambda v: self.smooth_label.setText(f"{v}%"))
+        self.sat = QDoubleSpinBox()
+        self.sat.setRange(0, 3)
+        self.sat.setSingleStep(0.1)
+        self.gain = QDoubleSpinBox()
+        self.gain.setRange(0, 3)
+        self.gain.setSingleStep(0.1)
+        self.method.setToolTip("Média: média da região. Mais viva: favorece cores saturadas e claras. "
+                               "Predominante: a cor que mais aparece.")
+        self.smooth.setToolTip("Quanto a cor demora para acompanhar a tela (0% = instantâneo).")
+        self.sat.setToolTip("1,0 = cor original; acima de 1 deixa as cores mais vivas.")
+        self.gain.setToolTip("Multiplica o brilho da cor (1,0 = original).")
+        self.method.currentIndexChanged.connect(on_change)
+        self.smooth.valueChanged.connect(on_change)
+        self.sat.valueChanged.connect(on_change)
+        self.gain.valueChanged.connect(on_change)
+
+    def smooth_row(self):
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.smooth, 1)
+        lay.addWidget(self.smooth_label)
+        return w
+
+    def set(self, st: dict):
+        self.method.setCurrentIndex(max(0, [k for k, _ in METHODS].index(st["method"])))
+        self.smooth.setValue(int(round(float(st["smoothing"]) * 100)))
+        self.smooth_label.setText(f"{self.smooth.value()}%")
+        self.sat.setValue(float(st["saturation"]))
+        self.gain.setValue(float(st["gain"]))
+
+    def get(self) -> dict:
+        return {"method": self.method.currentData(), "smoothing": self.smooth.value() / 100,
+                "saturation": self.sat.value(), "gain": self.gain.value()}
+
+    def setEnabled(self, on: bool):
+        for w in (self.method, self.smooth, self.sat, self.gain):
+            w.setEnabled(on)
+
+
 PALETTE = ["#ff5252", "#40c4ff", "#69f0ae", "#ffd740", "#e040fb", "#ff6e40", "#b2ff59", "#18ffff"]
 
 
@@ -72,6 +126,26 @@ class ZonesTab(QWidget):
         lim.addWidget(self.cap_status, 1)
         root.addLayout(lim)
 
+        glob = QGroupBox("Ajustes globais (todos os espaços sem ajustes próprios)")
+        gl = QHBoxLayout(glob)
+        self.g_style = StyleWidgets(self._global_changed)
+        self._loading = True
+        self.g_style.set(zone_style(cfg["ambient"], {}))
+        self._loading = False
+        gl.addWidget(QLabel("Cálculo da cor:"))
+        gl.addWidget(self.g_style.method)
+        gl.addWidget(QLabel("Suavização:"))
+        gl.addWidget(self.g_style.smooth_row(), 1)
+        gl.addWidget(QLabel("Saturação:"))
+        gl.addWidget(self.g_style.sat)
+        gl.addWidget(QLabel("Intensidade:"))
+        gl.addWidget(self.g_style.gain)
+        self.all_global = QPushButton("Todos seguem o global")
+        self.all_global.setToolTip("Remove os ajustes próprios de todos os espaços")
+        self.all_global.clicked.connect(self._all_follow_global)
+        gl.addWidget(self.all_global)
+        root.addWidget(glob)
+
         split = QSplitter(Qt.Vertical)
         root.addWidget(split, 1)
 
@@ -97,6 +171,12 @@ class ZonesTab(QWidget):
             b.clicked.connect(fn)
             row.addWidget(b)
         sl.addLayout(row)
+        row2 = QHBoxLayout()
+        for txt, fn in (("▦ Gerar grade…", self._grid), ("Remover grade", self._remove_grid)):
+            b = QPushButton(txt)
+            b.clicked.connect(fn)
+            row2.addWidget(b)
+        sl.addLayout(row2)
 
         self.props = QGroupBox("Propriedades do espaço")
         f = QFormLayout(self.props)
@@ -104,29 +184,19 @@ class ZonesTab(QWidget):
         self.name.textEdited.connect(self._edited)
         self.z_en = QCheckBox("Ativado")
         self.z_en.toggled.connect(self._edited)
-        self.method = QComboBox()
-        for k, label in METHODS:
-            self.method.addItem(label, k)
-        self.method.currentIndexChanged.connect(self._edited)
-        self.smooth = QSlider(Qt.Horizontal)
-        self.smooth.setRange(0, 95)
-        self.smooth.valueChanged.connect(self._edited)
-        self.sat = QDoubleSpinBox()
-        self.sat.setRange(0, 3)
-        self.sat.setSingleStep(0.1)
-        self.sat.valueChanged.connect(self._edited)
-        self.gain = QDoubleSpinBox()
-        self.gain.setRange(0, 3)
-        self.gain.setSingleStep(0.1)
-        self.gain.valueChanged.connect(self._edited)
+        self.custom = QCheckBox("Usar ajustes próprios")
+        self.custom.setToolTip("Desmarcado: este espaço segue os ajustes globais")
+        self.custom.toggled.connect(self._custom_toggled)
+        self.z_style = StyleWidgets(self._edited)
         self.swatch = QLabel()
         self.swatch.setFixedHeight(22)
         f.addRow("Nome:", self.name)
         f.addRow("", self.z_en)
-        f.addRow("Cálculo da cor:", self.method)
-        f.addRow("Suavização:", self.smooth)
-        f.addRow("Saturação:", self.sat)
-        f.addRow("Intensidade:", self.gain)
+        f.addRow("", self.custom)
+        f.addRow("Cálculo da cor:", self.z_style.method)
+        f.addRow("Suavização:", self.z_style.smooth_row())
+        f.addRow("Saturação:", self.z_style.sat)
+        f.addRow("Intensidade:", self.z_style.gain)
         f.addRow("Cor atual:", self.swatch)
         sl.addWidget(self.props)
         upper.addWidget(side)
@@ -182,17 +252,22 @@ class ZonesTab(QWidget):
         self.list.blockSignals(True)
         self.list.clear()
         for z in self.cfg["zones"]:
-            self.list.addItem(f"{'✔' if z['enabled'] else '✖'}  {z['name']}  ({len(z['keys'])} teclas)")
+            self.list.addItem(self._item_text(z))
         self.list.blockSignals(False)
         n = len(self.cfg["zones"])
         row = -1 if not n else min(select if select is not None else 0, n - 1)
         self.list.setCurrentRow(row)
         self._select(row)
 
+    @staticmethod
+    def _item_text(z) -> str:
+        own = "  ✎" if z.get("custom") else ""
+        return f"{'✔' if z['enabled'] else '✖'}  {z['name']}  ({len(z['keys'])} teclas){own}"
+
     def _refresh_item(self):
         if 0 <= self.cur < len(self.cfg["zones"]):
             z = self.cfg["zones"][self.cur]
-            self.list.item(self.cur).setText(f"{'✔' if z['enabled'] else '✖'}  {z['name']}  ({len(z['keys'])} teclas)")
+            self.list.item(self.cur).setText(self._item_text(z))
 
     def _select_row(self, idx):
         self.list.setCurrentRow(idx)
@@ -212,10 +287,9 @@ class ZonesTab(QWidget):
         self._loading = True
         self.name.setText(z["name"])
         self.z_en.setChecked(z["enabled"])
-        self.method.setCurrentIndex([k for k, _ in METHODS].index(z["method"]))
-        self.smooth.setValue(int(float(z["smoothing"]) * 100))
-        self.sat.setValue(float(z["saturation"]))
-        self.gain.setValue(float(z["gain"]))
+        self.custom.setChecked(bool(z.get("custom")))
+        self.z_style.set(zone_style(self.cfg["ambient"], z))
+        self.z_style.setEnabled(bool(z.get("custom")))
         self._loading = False
         self.kb.selected = set(z["keys"])
         self.kb.update()
@@ -259,6 +333,31 @@ class ZonesTab(QWidget):
             self._reload_list(self.cur)
             self.changed.emit()
 
+    def _grid(self):
+        d = GridDialog(self.app.keys, set(self.kb.selected), self)
+        if not d.exec():
+            return
+        base = d.base()
+        mon = self.current_monitor()
+        base["monitor"] = mon
+        if mon < len(self.app.capture.streams):
+            base["monitor_pos"] = list(self.app.capture.streams[mon].position)
+        new = d.generate(base)
+        self.cfg["zones"] = grid.apply(self.cfg["zones"], new, d.replace.isChecked())
+        self.app.sampler.state.clear()
+        self._reload_list(len(self.cfg["zones"]) - len(new))
+        self.changed.emit()
+
+    def _remove_grid(self):
+        n = sum(1 for z in self.cfg["zones"] if z.get("group") == grid.GRID_GROUP)
+        if not n or QMessageBox.question(self, "Remover grade", f"Remover os {n} espaços da grade?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        self.cfg["zones"] = [z for z in self.cfg["zones"] if z.get("group") != grid.GRID_GROUP]
+        self.app.sampler.state.clear()
+        self._reload_list(0)
+        self.changed.emit()
+
     # ----------------------------------------------------------------- edição
     def _edited(self, *_):
         if self._loading or not 0 <= self.cur < len(self.cfg["zones"]):
@@ -266,11 +365,47 @@ class ZonesTab(QWidget):
         z = self.cfg["zones"][self.cur]
         z["name"] = self.name.text()
         z["enabled"] = self.z_en.isChecked()
-        z["method"] = self.method.currentData()
-        z["smoothing"] = self.smooth.value() / 100
-        z["saturation"] = self.sat.value()
-        z["gain"] = self.gain.value()
+        if z.get("custom"):
+            z.update(self.z_style.get())
         self._refresh_item()
+        self.changed.emit()
+
+    def _custom_toggled(self, on):
+        if self._loading or not 0 <= self.cur < len(self.cfg["zones"]):
+            return
+        z = self.cfg["zones"][self.cur]
+        if on:  # começa a partir do que está valendo agora (o global)
+            z.update(zone_style(self.cfg["ambient"], {}))
+        z["custom"] = on
+        self._loading = True
+        self.z_style.set(zone_style(self.cfg["ambient"], z))
+        self._loading = False
+        self.z_style.setEnabled(on)
+        self._refresh_item()
+        self.changed.emit()
+
+    def _global_changed(self, *_):
+        if self._loading:
+            return
+        self.cfg["ambient"].update(self.g_style.get())
+        if 0 <= self.cur < len(self.cfg["zones"]) and not self.cfg["zones"][self.cur].get("custom"):
+            self._loading = True
+            self.z_style.set(zone_style(self.cfg["ambient"], {}))
+            self._loading = False
+        self.changed.emit()
+
+    def _all_follow_global(self):
+        n = sum(1 for z in self.cfg["zones"] if z.get("custom"))
+        if not n:
+            QMessageBox.information(self, "Ajustes globais", "Todos os espaços já seguem os ajustes globais.")
+            return
+        if QMessageBox.question(self, "Ajustes globais",
+                                f"{n} espaço(s) têm ajustes próprios. Fazer todos seguirem o global?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        for z in self.cfg["zones"]:
+            z["custom"] = False
+        self._reload_list(self.cur)
         self.changed.emit()
 
     def _keys_changed(self):
@@ -284,7 +419,7 @@ class ZonesTab(QWidget):
         self.cfg["zones"][self.cur]["keys"] = sorted(keys)
         for i in range(self.list.count()):
             z = self.cfg["zones"][i]
-            self.list.item(i).setText(f"{'✔' if z['enabled'] else '✖'}  {z['name']}  ({len(z['keys'])} teclas)")
+            self.list.item(i).setText(self._item_text(z))
         self.changed.emit()
 
     def _limits_changed(self):

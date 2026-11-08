@@ -90,6 +90,17 @@ class Controller:
         self.start_macros() if on else self.stop_macros()
         self.save_pending = True
 
+    # ------------------------------------------------------------------ perfis
+    def load_profile(self, name: str | None, data: dict | None = None):
+        """Carrega um perfil salvo (ou dados importados) e aplica nos motores."""
+        from . import profiles
+        profiles.apply(self.cfg, data if data is not None else profiles.read(name), name)
+        self.sampler.state.clear()
+        self.sampler.zone_rgb.clear()
+        self.set_ambient(bool(self.cfg["ambient"]["enabled"]))  # também reaplica o modo
+        self.lighting.colors_changed()
+        self.save_pending = True
+
     # ------------------------------------------------------------------ encerrar
     def shutdown(self):
         self.stop_macros()

@@ -225,12 +225,15 @@ class ScreenPreview(QWidget):
         for idx, z, live in self.zones:
             r = self._to_px(z["rect"])
             sel = idx == self.current
-            p.setBrush(QColor(live.red(), live.green(), live.blue(), 70))
-            p.setPen(QPen(QColor("#ffffff") if sel else live, 3 if sel else 2,
+            is_grid = z.get("group") == "grade"
+            p.setBrush(QColor(live.red(), live.green(), live.blue(), 110 if is_grid else 70))
+            width = 3 if sel else (1 if is_grid else 2)
+            p.setPen(QPen(QColor("#ffffff") if sel else live, width,
                           Qt.SolidLine if z["enabled"] else Qt.DashLine))
             p.drawRect(r)
-            p.setPen(QColor("#fff"))
-            p.drawText(r.adjusted(4, 2, -2, -2), Qt.AlignLeft | Qt.AlignTop, z["name"])
+            if sel or (not is_grid and r.width() > 40):
+                p.setPen(QColor("#fff"))
+                p.drawText(r.adjusted(4, 2, -2, -2), Qt.AlignLeft | Qt.AlignTop, z["name"])
             if sel:
                 p.fillRect(QRectF(r.right() - self.HANDLE, r.bottom() - self.HANDLE, self.HANDLE, self.HANDLE),
                            QColor("#fff"))

@@ -28,8 +28,16 @@ qualquer programa rodando como seu usuário pode ler o que você digita nele.
 3. Com o espaço selecionado, clique nas teclas que devem receber a cor dele.
 4. Marque “Ativar espaços de tela”.
 
-Cada espaço tem: cálculo da cor (média / mais viva / predominante), suavização, saturação e intensidade.
+Cálculo da cor (média / mais viva / predominante), suavização, saturação e intensidade são
+**globais**: o grupo “Ajustes globais” vale para todos os espaços. Para uma exceção, marque “Usar
+ajustes próprios” no espaço (ele aparece com ✎ na lista). “Todos seguem o global” desfaz as exceções.
 Pode haver vários espaços, em monitores diferentes, cada um com um conjunto de teclas.
+
+**Grade (▦ Gerar grade…):** divide o monitor em linhas × colunas, ou em uma região por tecla, e liga
+cada região às teclas na mesma posição física. O canto superior esquerdo da tela vai para o Esc e o
+inferior direito para o Enter do numérico, então o teclado vira um "mini monitor". Dá para usar o
+teclado inteiro, só o bloco principal ou as teclas selecionadas, e limitar a uma área do monitor. Os
+espaços gerados são normais (editáveis); “Remover grade” apaga só eles.
 
 ### Macros
 - Gatilho: tecla única ou combinação (Ctrl/Shift/Super valem dos dois lados).
@@ -37,6 +45,14 @@ Pode haver vários espaços, em monitores diferentes, cada um com um conjunto de
 - Passos: tecla (tocar/pressionar/soltar), atraso, digitar texto (ABNT2 ou US, com acentos), executar comando, gravar sequência.
 - O motor captura o teclado com exclusividade e repassa tudo por um teclado virtual (`uinput`).
 - **Emergência:** `Ctrl + Alt + Pause` desliga o motor de macros e devolve o teclado.
+
+### Perfis
+A barra no topo da janela salva e carrega perfis. Um perfil guarda cores por tecla, efeito, brilho,
+espaços de tela (inclusive a grade) com seus limites, e macros. Ficam fora do perfil e valem para
+todos: layout, calibração dos LEDs, permissão de captura, layout do texto e o liga/desliga do motor
+de macros. “● alterações não salvas” aparece quando o estado atual difere do perfil salvo. Também dá
+para trocar de perfil pela bandeja, importar/exportar `.json` e iniciar com
+`surara-control --profile NOME`. Os arquivos ficam em `~/.config/surara-control/profiles/`.
 
 ## ⚠️ Memória flash do teclado
 
@@ -73,6 +89,7 @@ surara-control                 interface gráfica
 surara-control --minimized     direto na bandeja
 surara-control daemon          sem interface (macros + espaços + cores)
 surara-control apply           aplica cores/efeito salvos e sai
+surara-control --profile NOME  carrega um perfil ao iniciar (com gui, daemon ou apply)
 ```
 
 A configuração fica em `~/.config/surara-control/config.json`. Não rode a interface e o `daemon` ao mesmo tempo.

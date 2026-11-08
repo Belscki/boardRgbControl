@@ -22,12 +22,18 @@ DEFAULTS = {
         # modo direto), então as trocas são espaçadas e só acontecem em mudanças visíveis.
         "min_interval": 2.0,       # segundos mínimos entre trocas de cor
         "threshold": 48,           # diferença mínima (soma |ΔR|+|ΔG|+|ΔB|) para trocar a cor de uma tecla
+        # ajustes globais de cor (valem para todo espaço sem "custom")
+        "method": "average",
+        "smoothing": 0.5,
+        "saturation": 1.2,
+        "gain": 1.0,
         "restore_token": "",
     },
     "zones": [],
     "macros_enabled": False,
     "macro_step_delay_ms": 8,
     "macros": [],
+    "active_profile": "",          # nome do perfil carregado ("" = nenhum)
 }
 
 ZONE_DEFAULT = {
@@ -41,7 +47,31 @@ ZONE_DEFAULT = {
     "smoothing": 0.5,              # 0 = instantâneo, 0.95 = muito suave
     "saturation": 1.2,
     "gain": 1.0,
+    "group": "",                   # "grade" = gerado pelo gerador de grade
+    "custom": False,               # True = usa method/smoothing/saturation/gain próprios
 }
+
+STYLE_KEYS = ["method", "smoothing", "saturation", "gain"]
+
+
+def zone_style(ambient: dict, zone: dict) -> dict:
+    """Ajustes efetivos de um espaço: os próprios (custom) ou os globais."""
+    src = zone if zone.get("custom") else ambient
+    return {k: src.get(k, ZONE_DEFAULT[k]) for k in STYLE_KEYS}
+
+
+def migrate_style(ambient: dict, zones: list[dict]):
+    """Dados antigos (ajustes só por espaço): o global vira o valor mais comum entre os
+    espaços, e espaços diferentes dele ficam marcados como "custom" (nada muda na prática)."""
+    if "method" in ambient:
+        return
+    from collections import Counter
+    for k in STYLE_KEYS:
+        vals = Counter(z.get(k, ZONE_DEFAULT[k]) for z in zones)
+        ambient[k] = vals.most_common(1)[0][0] if vals else DEFAULTS["ambient"][k]
+    for z in zones:
+        if "custom" not in z:
+            z["custom"] = any(z.get(k, ZONE_DEFAULT[k]) != ambient[k] for k in STYLE_KEYS)
 
 MACRO_DEFAULT = {
     "name": "Nova macro",
@@ -77,7 +107,9 @@ class Config:
     def load(self):
         try:
             with open(self.path) as f:
-                self.data = _merge(DEFAULTS, json.load(f))
+                raw = json.load(f)
+            migrate_style(raw.setdefault("ambient", {}), raw.get("zones", []))
+            self.data = _merge(DEFAULTS, raw)
         except FileNotFoundError:
             pass
         except (json.JSONDecodeError, OSError) as e:

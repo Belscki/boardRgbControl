@@ -6,6 +6,7 @@ Uso:
     python -m surara daemon          roda macros/espaços/cores sem interface
     python -m surara apply           aplica cores/efeito salvos e sai
     python -m surara flashtest write|check   teste: as cores sobrevivem a desconectar?
+    --profile NOME                   carrega um perfil salvo ao iniciar (gui, daemon, apply)
 """
 from __future__ import annotations
 
@@ -47,23 +48,33 @@ def cmd_flashtest(action: str):
             pass
 
 
-def cmd_apply():
+def _load_profile(ctl, name):
+    if name:
+        ctl.load_profile(name)
+        print(f"Perfil “{name}” carregado")
+
+
+def cmd_apply(profile=None):
     from .controller import Controller
     cfg = Config()
     cfg["macros_enabled"] = False
     cfg["ambient"]["enabled"] = False
     ctl = Controller(cfg)
+    _load_profile(ctl, profile)
+    cfg["ambient"]["enabled"] = False
+    ctl.set_ambient(False)
     ctl.lighting.mode_changed()
     time.sleep(1.5)
     print(ctl.lighting.status)
     ctl.shutdown()
 
 
-def cmd_daemon():
+def cmd_daemon(profile=None):
     from gi.repository import GLib  # noqa: F401  (garante GLib disponível)
     from .controller import Controller
     cfg = Config()
     ctl = Controller(cfg)
+    _load_profile(ctl, profile)
     stop = []
     signal.signal(signal.SIGTERM, lambda *_: stop.append(1))
     signal.signal(signal.SIGINT, lambda *_: stop.append(1))
@@ -81,7 +92,7 @@ def cmd_daemon():
     ctl.shutdown()
 
 
-def cmd_gui(minimized: bool):
+def cmd_gui(minimized: bool, profile=None):
     from PySide6.QtWidgets import QApplication
     from .controller import Controller
     from .gui.main_window import MainWindow
@@ -92,6 +103,7 @@ def cmd_gui(minimized: bool):
     app.setQuitOnLastWindowClosed(False)
     cfg = Config()
     ctl = Controller(cfg)
+    _load_profile(ctl, profile)
     win = MainWindow(ctl)
     if not minimized or not win.tray:
         win.show()
@@ -109,15 +121,16 @@ def main():
     ap.add_argument("command", nargs="?", default="gui", choices=["gui", "daemon", "apply", "flashtest"])
     ap.add_argument("action", nargs="?", choices=["write", "check"])
     ap.add_argument("--minimized", action="store_true", help="iniciar na bandeja")
+    ap.add_argument("--profile", metavar="NOME", help="carregar um perfil salvo ao iniciar")
     a = ap.parse_args()
     if a.command == "flashtest":
         cmd_flashtest(a.action or "check")
     elif a.command == "apply":
-        cmd_apply()
+        cmd_apply(a.profile)
     elif a.command == "daemon":
-        cmd_daemon()
+        cmd_daemon(a.profile)
     else:
-        cmd_gui(a.minimized)
+        cmd_gui(a.minimized, a.profile)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from .capture import ScreenCapture
-from .config import Config
+from .config import Config, zone_style
 
 
 def region_color(frame: np.ndarray, rect, method: str) -> np.ndarray | None:
@@ -78,11 +78,12 @@ class AmbientSampler(threading.Thread):
             frame = self.capture.get_frame(idx)
             if frame is None:
                 continue
-            c = region_color(frame, z["rect"], z["method"])
+            st = zone_style(self.cfg["ambient"], z)
+            c = region_color(frame, z["rect"], st["method"])
             if c is None:
                 continue
-            c = adjust(c, float(z["saturation"]), float(z["gain"]))
-            s = min(0.98, max(0.0, float(z["smoothing"])))
+            c = adjust(c, float(st["saturation"]), float(st["gain"]))
+            s = min(0.98, max(0.0, float(st["smoothing"])))
             prev = self.state.get(i)
             c = c if prev is None else prev * s + c * (1 - s)
             self.state[i] = c
